@@ -77,8 +77,8 @@ Oracle比SQL Server高，SQL Server又比MySQL高
 
 ***
 
-'''
+```
 数据库创建、建表、增删改查、缓冲区管理、崩溃恢复等模块中的函数的主要功能及处理的过程【比如Buf_page_get()；buf_LRU_get_free_block()；
 create_table_def()；dict_create_or_check_sys_tablespace()；innobase_commit()；recv_recovery_from_checkpoint_start()；row_sel()；row_search_mvcc()；row_ins()；row_upd_step()等】。
 通过执行SQL语句进行跟踪观察。
-'''
+```
