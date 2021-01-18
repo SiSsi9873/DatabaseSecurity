@@ -161,26 +161,37 @@ Buffer Pool Instance中，如果没有找到这个数据页且mode为BUF_GET_IF_
 这个函数以及其调用的函数可以说是整个LRU模块最重要的函数，在整个Buffer Pool模块中也有举足轻重的作用。
 如果能把这几个函数吃透，相信其他函数很容易就能读懂。
 ```
-首先，如果是使用ENGINE_NO_CACHE发送过来的SQL需要读取数据，则优先从Quick List中获取(buf_quick_lru_get_free)。
+首先，如果是使用ENGINE_NO_CACHE发送过来的SQL需要读取数据，则优先从Quick List中获取
+(buf_quick_lru_get_free)。
 
-接着，统计Free List和LRU List的长度，如果发现他们再Buffer Chunks占用太少的空间，则表示太多的空间被行锁，
-自使用哈希等内部结构给占用了，一般这些都是大事务导致的。这时候会给出报警。
+接着，统计Free List和LRU List的长度，如果发现他们再Buffer Chunks占用太少的空间，则表示
+太多的空间被行锁，自使用哈希等内部结构给占用了，一般这些都是大事务导致的。这时候会给出报警。
 
-接着，查看Free List中是否还有空闲的数据页(buf_LRU_get_free_only)，如果有则直接返回，否则进入下一步。
-大多数情况下，这一步都能找到空闲的数据页。
-如果Free List中已经没有空闲的数据页了，则会尝试驱逐LRU List末尾的数据页。如果系统有压缩页，情况就有点复杂，
-InnoDB会调用buf_LRU_evict_from_unzip_LRU来决定是否驱逐压缩页，如果Unzip LRU List大于LRU List的十分之一
-或者当前InnoDB IO压力比较大，则会优先从Unzip LRU List中把解压页给驱逐，否则会从LRU List中把解压页和压缩页同时驱逐。
-不管走哪条路径，最后都调用了函数buf_LRU_free_page来执行驱逐操作，这个函数由于要处理压缩页解压页各种情况，极其复杂。
-大致的流程：首先判断是否是脏页，如果是则不驱逐，否则从LRU List中把链表删除，必要的话还从Unzip LRU List移走这个数据页
-(buf_LRU_block_remove_hashed)，接着如果我们选择保留压缩页，则需要重新创建一个压缩页控制体，插入LRU List中，
-如果是脏的压缩页还要插入到Flush List中，最后才把删除的数据页插入到Free List中(buf_LRU_block_free_hashed_page)。
+接着，查看Free List中是否还有空闲的数据页(buf_LRU_get_free_only)，如果有则直接返回，
+否则进入下一步。大多数情况下，这一步都能找到空闲的数据页。
 
-如果在上一步中没有找到空闲的数据页，则需要刷脏了(buf_flush_single_page_from_LRU)，由于buf_LRU_get_free_block
-这个函数是在用户线程中调用的，所以即使要刷脏，这里也是刷一个脏页，防止刷过多的脏页阻塞用户线程。
+如果Free List中已经没有空闲的数据页了，则会尝试驱逐LRU List末尾的数据页。如果系统有压缩页，
+情况就有点复杂，InnoDB会调用buf_LRU_evict_from_unzip_LRU来决定是否驱逐压缩页，如果
+Unzip LRU List大于LRU List的十分之一或者当前InnoDB IO压力比较大，则会优先从Unzip LRU List中
+把解压页给驱逐，否则会从LRU List中把解压页和压缩页同时驱逐。
 
-如果上一步的刷脏因为数据页被其他线程读取而不能刷脏，则重新跳转到上述第二步。进行第二轮迭代，与第一轮迭代的区别是，
-第一轮迭代在扫描LRU List时，最多只扫描innodb_lru_scan_depth个，而在第二轮迭代开始，扫描整个LRU List。
+不管走哪条路径，最后都调用了函数buf_LRU_free_page来执行驱逐操作，这个函数由于要处理
+压缩页解压页各种情况，极其复杂。
+
+大致的流程：首先判断是否是脏页，如果是则不驱逐，否则从LRU List中把链表删除，必要的话
+还从Unzip LRU List移走这个数据页(buf_LRU_block_remove_hashed)，接着如果我们
+选择保留压缩页，则需要重新创建一个压缩页控制体，插入LRU List中，
+如果是脏的压缩页还要插入到Flush List中，最后才把删除的数据页插入到
+Free List中(buf_LRU_block_free_hashed_page)。
+
+如果在上一步中没有找到空闲的数据页，则需要刷脏了(buf_flush_single_page_from_LRU)，
+由于buf_LRU_get_free_block这个函数是在用户线程中调用的，所以即使要刷脏，
+这里也是刷一个脏页，防止刷过多的脏页阻塞用户线程。
+
+如果上一步的刷脏因为数据页被其他线程读取而不能刷脏，则重新跳转到上述第二步。进行第二轮迭代，
+与第一轮迭代的区别是，第一轮迭代在扫描LRU List时，最多只扫描innodb_lru_scan_depth个，
+而在第二轮迭代开始，扫描整个LRU List。
+
 如果很不幸，这一轮还是没有找到空闲的数据页，从三轮迭代开始，在刷脏前等待10ms。
 
 最终找到一个空闲页后，page的state为BUF_BLOCK_READY_FOR_USE。
