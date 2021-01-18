@@ -74,3 +74,11 @@ Oracle比SQL Server高，SQL Server又比MySQL高
 ### 3. 关于数据库及其实现原理，数据库内部数据的存储机制、事务的概念（如隔离级）、ACID特性；数据库应该怎样设计才能保证数据冗余最少、数据一致性如何维护、如何使得数据库操作效率更高；复杂查询有哪些（如：子查询、带exist的查询、相关子查询），这些查询的查询计划是怎样的（有些数据库可以看到查询计划）、关系代数在数据库中是如何实现的；备份恢复机制是怎样的、并发操作的一致性是什么、并发操作的封锁和多版本机制是什么？
 ***
 ### 4. 下载安装开源的数据库源代码，研究数据库的实现机制，看看上述原理是怎样实现的。
+
+***
+
+'''
+数据库创建、建表、增删改查、缓冲区管理、崩溃恢复等模块中的函数的主要功能及处理的过程【比如Buf_page_get()；buf_LRU_get_free_block()；
+create_table_def()；dict_create_or_check_sys_tablespace()；innobase_commit()；recv_recovery_from_checkpoint_start()；row_sel()；row_search_mvcc()；row_ins()；row_upd_step()等】。
+通过执行SQL语句进行跟踪观察。
+'''
