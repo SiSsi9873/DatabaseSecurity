@@ -93,20 +93,25 @@ row_sel()；row_search_mvcc()；row_ins()；row_upd_step()等】。
 buf_page_get_gen，参数主要为space_id, page_no, lock_type, mode以及mtr。这里主要介绍一个mode这个参数，
 其表示读取的方式，目前支持六种，前三种用的比较多。
 
-**BUF_GET:** 
+***BUF_GET:***
 默认获取数据页的方式，如果数据页不在Buffer Pool中，则从磁盘读取，如果已经在Buffer Pool中，需要判断
 是否要把他加入到young list中以及判断是否需要进行线性预读。如果是读取则加读锁，修改则加写锁。
-**BUF_GET_IF_IN_POOL:**
+
+***BUF_GET_IF_IN_POOL:***
 只在Buffer Pool中查找这个数据页，如果在则判断是否要把它加入到young list中以及判断是否需要进行线性预读。
 如果不在则直接返回空。加锁方式与BUF_GET类似。
-**BUF_PEEK_IF_IN_POOL:** 
+
+***BUF_PEEK_IF_IN_POOL:*** 
 与BUF_GET_IF_IN_POOL类似，只是即使条件满足也不把它加入到young list中也不进行线性预读。加锁方式与BUF_GET类似。
-**BUF_GET_NO_LATCH:** 
+
+***BUF_GET_NO_LATCH:*** 
 不管对数据页是读取还是修改，都不加锁。其他方面与BUF_GET类似。
-**BUF_GET_IF_IN_POOL_OR_WATCH:** 
+
+***BUF_GET_IF_IN_POOL_OR_WATCH:*** 
 只在Buffer Pool中查找这个数据页，如果在则判断是否要把它加入到young list中以及判断是否需要进行线性预读。
 如果不在则设置watch。加锁方式与BUF_GET类似。这个是要是给purge线程用。
-**BUF_GET_POSSIBLY_FREED:** 
+
+***BUF_GET_POSSIBLY_FREED:*** 
 这个mode与BUF_GET类似，只是允许相应的数据页在函数执行过程中被释放，主要用在估算Btree两个slot之前的数据行数。
 
 接下来，我们简要分析一下这个函数的主要逻辑。
