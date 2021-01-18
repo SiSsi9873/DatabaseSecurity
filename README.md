@@ -86,7 +86,7 @@ row_sel()；row_search_mvcc()；row_ins()；row_upd_step()等】。
 通过执行SQL语句进行跟踪观察。
 ```
 
-* buf_page_get函数解析
+#### * buf_page_get函数解析
 
 这个函数极其重要，是其他模块获取数据页的外部接口函数。如果请求的数据页已经在Buffer Pool中了，修改相应信息后，
 就直接返回对应数据页指针，如果Buffer Pool中没有相关数据页，则从磁盘中读取。Buf_page_get是一个宏定义，真正的函数为
@@ -122,23 +122,37 @@ buf_page_get_gen，参数主要为space_id, page_no, lock_type, mode以及mtr。
 这里有个小细节，page_no的第六位被砍掉，这是为了保证一个extent的数据能被缓存到同一个
 Buffer Pool Instance中，便于后面的预读操作。
 
-接着，调用buf_page_hash_get_low函数在page hash中查找这个数据页是否已经被加载到对应的Buffer Pool Instance中，
-如果没有找到这个数据页且mode为BUF_GET_IF_IN_POOL_OR_WATCH则设置watch数据页(buf_pool_watch_set)，
-接下来，如果没有找到数据页且mode为BUF_GET_IF_IN_POOL、BUF_PEEK_IF_IN_POOL或者BUF_GET_IF_IN_POOL_OR_WATCH函数
-直接返回空，表示没有找到数据页。如果没有找到数据但是mode为其他，就从磁盘中同步读取(buf_read_page)。
+接着，调用buf_page_hash_get_low函数在page hash中查找这个数据页是否已经被加载到对应的
+Buffer Pool Instance中，如果没有找到这个数据页且mode为BUF_GET_IF_IN_POOL_OR_WATCH
+则设置watch数据页(buf_pool_watch_set)，
+
+接下来，如果没有找到数据页且mode为BUF_GET_IF_IN_POOL、BUF_PEEK_IF_IN_POOL
+或者BUF_GET_IF_IN_POOL_OR_WATCH函数直接返回空，表示没有找到数据页。
+如果没有找到数据但是mode为其他，就从磁盘中同步读取(buf_read_page)。
+
 在读取磁盘数据之前，我们如果发现需要读取的是非压缩页，则先从Free List中获取空闲的数据页，
 如果Free List中已经没有了，则需要通过刷脏来释放数据页，这里的一些细节我们后续在LRU模块再分析，
-获取到空闲的数据页后，加入到LRU List中(buf_page_init_for_read)。在读取磁盘数据之前，我们如果发现需要读取的是压缩页，
-则临时分配一个buf_page_t用来做控制体，通过伙伴系统分配到压缩页存数据的空间，最后同样加入到LRU List中(buf_page_init_for_read)。
-做完这些后，我们就调用IO子系统的接口同步读取页面数据，如果读取数据失败，我们重试100次(BUF_PAGE_READ_MAX_RETRIES)
-然后触发断言，如果成功则判断是否要进行随机预读(随机预读相关的细节我们也在预读预写模块分析)。
-接着，读取数据成功后，我们需要判断读取的数据页是不是压缩页，如果是的话，因为从磁盘中读取的压缩页的控制体是临时分配的，
-所以需要重新分配block(buf_LRU_get_free_block)，把临时分配的buf_page_t给释放掉，用buf_relocate函数替换掉，
-接着进行解压，解压成功后，设置state为BUF_BLOCK_FILE_PAGE，最后加入Unzip LRU List中。
-接着，我们判断这个页是否是第一次访问，如果是则设置buf_page_t::access_time，如果不是，我们则判断其是不是在Quick List中，
-如果在Quick List中且当前事务不是加过Hint语句的事务，则需要把这个数据页从Quick List删除，
-因为这个页面被其他的语句访问到了，不应该在Quick List中了。
-接着，如果mode不为BUF_PEEK_IF_IN_POOL，我们需要判断是否把这个数据页移到young list中，具体细节在后面LRU模块中分析。
+
+获取到空闲的数据页后，加入到LRU List中(buf_page_init_for_read)。在读取磁盘数据之前，
+我们如果发现需要读取的是压缩页，则临时分配一个buf_page_t用来做控制体，通过伙伴系统分配到
+压缩页存数据的空间，最后同样加入到LRU List中(buf_page_init_for_read)。
+
+做完这些后，我们就调用IO子系统的接口同步读取页面数据，如果读取数据失败，我们重试100次
+(BUF_PAGE_READ_MAX_RETRIES)然后触发断言，如果成功则判断是否要进行随机预读
+(随机预读相关的细节我们也在预读预写模块分析)。
+
+接着，读取数据成功后，我们需要判断读取的数据页是不是压缩页，如果是的话，因为从磁盘中读取的压缩页的
+控制体是临时分配的，所以需要重新分配block(buf_LRU_get_free_block)，把临时分配的buf_page_t
+给释放掉，用buf_relocate函数替换掉，接着进行解压，解压成功后，设置state为BUF_BLOCK_FILE_PAGE，
+最后加入Unzip LRU List中。
+
+接着，我们判断这个页是否是第一次访问，如果是则设置buf_page_t::access_time，如果不是，
+我们则判断其是不是在Quick List中，如果在Quick List中且当前事务不是加过Hint语句的事务，
+则需要把这个数据页从Quick List删除，因为这个页面被其他的语句访问到了，不应该在Quick List中了。
+
+接着，如果mode不为BUF_PEEK_IF_IN_POOL，我们需要判断是否把这个数据页移到young list中，
+具体细节在后面LRU模块中分析。
 接着，如果mode不为BUF_GET_NO_LATCH，我们给数据页加上读写锁。
-最后，如果mode不为BUF_PEEK_IF_IN_POOL且这个数据页是第一次访问，则判断是否需要进行线性预读(线性预读相关的细节我们也在预读预写模块分析)。
+最后，如果mode不为BUF_PEEK_IF_IN_POOL且这个数据页是第一次访问，则判断是否需要进行线性预读
+(线性预读相关的细节我们也在预读预写模块分析)。
 ```
